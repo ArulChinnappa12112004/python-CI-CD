@@ -1,3 +1,76 @@
+# name: Python CI/CD
+
+# on:
+#   push:
+#     branches:
+#       - main
+
+#   pull_request:
+#     branches:
+#       - main
+
+# jobs:
+
+#   test:
+#     runs-on: ubuntu-latest
+
+#     steps:
+#       - name: Checkout Code
+#         uses: actions/checkout@v4
+
+#       - name: Setup Python
+#         uses: actions/setup-python@v5
+#         with:
+#           python-version: "3.11"
+
+#       - name: Install Dependencies
+#         run: |
+#           python -m pip install --upgrade pip
+#           pip install -r requirements.txt
+
+#       - name: Run Unit Tests
+#         run: |
+#           pytest
+
+#   build-and-push:
+#     needs: test
+#     runs-on: ubuntu-latest
+
+#     steps:
+#       - name: Checkout Code
+#         uses: actions/checkout@v4
+
+#       - name: Login to Docker Hub
+#         uses: docker/login-action@v3
+#         with:
+#           username: ${{ secrets.DOCKER_USERNAME }}
+#           password: ${{ secrets.DOCKER_PASSWORD }}
+
+#       - name: Build Docker Image
+#         run: |
+#           docker build -t ${{ secrets.DOCKER_USERNAME }}/calculator-app:${{ github.run_number }} .
+#           docker tag ${{ secrets.DOCKER_USERNAME }}/calculator-app:${{ github.run_number }} ${{ secrets.DOCKER_USERNAME }}/calculator-app:latest
+
+#       - name: Verify Docker Image
+#         run: |
+#           docker images
+
+#       - name: Push Docker Images
+#         run: |
+#           docker push ${{ secrets.DOCKER_USERNAME }}/calculator-app:${{ github.run_number }}
+#           docker push ${{ secrets.DOCKER_USERNAME }}/calculator-app:latest
+
+#   deploy:
+#     needs: build-and-push
+#     runs-on: ubuntu-latest
+
+#     steps:
+#       - name: Deploy Application
+#         run: |
+#           echo "Pulling image from Docker Hub..."
+#           echo "Deploying calculator-app..."
+#           echo "Deployment Successful"
+
 name: Python CI/CD
 
 on:
@@ -12,7 +85,6 @@ on:
 jobs:
 
   test:
-
     runs-on: ubuntu-latest
 
     steps:
@@ -24,42 +96,71 @@ jobs:
         with:
           python-version: "3.11"
 
-      - name: Install Dependencies
+      - name: Upgrade Pip
         run: |
           python -m pip install --upgrade pip
+
+      - name: Install Dependencies
+        run: |
           pip install -r requirements.txt
+
+      - name: Code Quality Check
+        run: |
+          flake8 . --count --show-source --statistics
 
       - name: Run Unit Tests
         run: |
-          pytest
+          pytest -v
 
-  build-and-package:
-
+  build-and-push:
     needs: test
-
     runs-on: ubuntu-latest
 
     steps:
       - name: Checkout Code
         uses: actions/checkout@v4
 
+      - name: Login to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_PASSWORD }}
+
       - name: Build Docker Image
         run: |
-          docker build -t calculator-app:${{ github.run_number }} .
-          docker tag calculator-app:${{ github.run_number }} calculator-app:latest
+          docker build -t ${{ secrets.DOCKER_USERNAME }}/calculator-app:${{ github.run_number }} .
+          docker tag ${{ secrets.DOCKER_USERNAME }}/calculator-app:${{ github.run_number }} \
+                     ${{ secrets.DOCKER_USERNAME }}/calculator-app:latest
 
       - name: Verify Docker Image
         run: |
           docker images
 
+      - name: Test Docker Container
+        run: |
+          docker run -d --name calculator-container -p 5000:5000 \
+            ${{ secrets.DOCKER_USERNAME }}/calculator-app:${{ github.run_number }}
+
+          sleep 10
+
+          curl http://localhost:5000
+
+          docker stop calculator-container
+          docker rm calculator-container
+
+      - name: Push Docker Images
+        run: |
+          docker push ${{ secrets.DOCKER_USERNAME }}/calculator-app:${{ github.run_number }}
+          docker push ${{ secrets.DOCKER_USERNAME }}/calculator-app:latest
+
   deploy:
-
-    needs: build-and-package
-
+    needs: build-and-push
     runs-on: ubuntu-latest
 
     steps:
       - name: Deploy Application
         run: |
-          echo "Deploying Application..."
-          echo "Application Deployed Successfully"
+          echo "Pulling image from Docker Hub..."
+          echo "docker pull ${{ secrets.DOCKER_USERNAME }}/calculator-app:latest"
+          echo "Deploying calculator-app..."
+          echo "Deployment Successful"
