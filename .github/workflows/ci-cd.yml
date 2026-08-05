@@ -11,12 +11,11 @@ on:
 
 jobs:
 
-  build-test:
+  test:
 
     runs-on: ubuntu-latest
 
     steps:
-
       - name: Checkout Code
         uses: actions/checkout@v4
 
@@ -30,18 +29,36 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt
 
-      - name: Run Tests
+      - name: Run Unit Tests
         run: |
           pytest
 
-  deploy:
+  build-and-package:
 
-    needs: build-test
+    needs: test
 
     runs-on: ubuntu-latest
 
     steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
 
+      - name: Build Docker Image
+        run: |
+          docker build -t calculator-app:${{ github.run_number }} .
+          docker tag calculator-app:${{ github.run_number }} calculator-app:latest
+
+      - name: Verify Docker Image
+        run: |
+          docker images
+
+  deploy:
+
+    needs: build-and-package
+
+    runs-on: ubuntu-latest
+
+    steps:
       - name: Deploy Application
         run: |
           echo "Deploying Application..."
